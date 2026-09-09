@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Xservis",
+      "hasCanvas": false,
+      "bodyTextLen": 113,
+      "bodyTextHash": "a5d624a2baeb34ca02ff88e713ba64acfd8124328ee2cb0a43f38bc7b93e45a5",
+      "bodyTextPrefix": "XSERVIS XFreedom гость Откуда выбрать Куда выбрать 3D карта − По",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Xservis",
+      "hasCanvas": false,
+      "bodyTextLen": 113,
+      "bodyTextHash": "a5d624a2baeb34ca02ff88e713ba64acfd8124328ee2cb0a43f38bc7b93e45a5",
+      "bodyTextPrefix": "XSERVIS XFreedom гость Откуда выбрать Куда выбрать 3D карта − По",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

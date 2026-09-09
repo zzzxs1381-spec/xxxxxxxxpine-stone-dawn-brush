@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/monitor",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "XFreedom",
+      "hasCanvas": false,
+      "bodyTextLen": 3404,
+      "bodyTextHash": "d487ea1ee8664b801e4bd085dba85de56150b53b933f7f44099c9d7b899bab59",
+      "bodyTextPrefix": "XF XFREEDOM Как это Что режут Монитор Проверка Карта Тарифы Теле",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/monitor.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "XFreedom",
+      "hasCanvas": false,
+      "bodyTextLen": 3404,
+      "bodyTextHash": "d487ea1ee8664b801e4bd085dba85de56150b53b933f7f44099c9d7b899bab59",
+      "bodyTextPrefix": "XF XFREEDOM Как это Что режут Монитор Проверка Карта Тарифы Теле",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/monitor-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/monitor.json"
+}
