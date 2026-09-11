@@ -1,1 +1,0 @@
-import{i as e,t}from"./react-SIfiwpqq.js";import{i as n}from"./server-M9YVKevO.js";var r=e(t(),1);function i(){let[e,t]=(0,r.useState)(null),[i,a]=(0,r.useState)(null),o=(0,r.useCallback)(async()=>{try{let e=await n();return t(e),a(null),e}catch{return a(`Не удалось загрузить кабинет`),null}},[]);return(0,r.useEffect)(()=>{o()},[o]),{data:e,err:i,reload:o}}export{i as t};

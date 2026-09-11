@@ -14,6 +14,7 @@ import { runCabinetProbe } from "@/lib/xfreedom/run-probe";
 import { measureServices, pickTransport, serviceEvidence, type ServiceProbe } from "@/lib/xfreedom/service-probe";
 import { startTrial } from "@/lib/xfreedom/server";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { EarthMap } from "@/components/earth-map";
 
 type Probe = ServiceProbe;
 type Tab = "home" | "pay" | "lane";
@@ -193,6 +194,38 @@ function diskXY(point: GeoPoint) {
   return { x: 50 + x * 46, y: 50 - y * 46 };
 }
 
+function diskToGeo(clientX: number, clientY: number, el: HTMLElement): GeoPoint | null {
+  const r = el.getBoundingClientRect();
+  if (r.width < 8 || r.height < 8) return null;
+  const dx = clientX - (r.left + r.width / 2);
+  const dy = clientY - (r.top + r.height / 2);
+  let angle = 0;
+  const tr = getComputedStyle(el).transform;
+  if (tr && tr !== "none") {
+    const m = new DOMMatrix(tr);
+    angle = Math.atan2(m.b, m.a);
+  }
+  const c = Math.cos(-angle);
+  const s = Math.sin(-angle);
+  const lx = dx * c - dy * s;
+  const ly = dx * s + dy * c;
+  const x = lx / (r.width * 0.46);
+  const y = -ly / (r.height * 0.46);
+  const rho2 = x * x + y * y;
+  if (rho2 > 1.02) return null;
+  const z = Math.sqrt(Math.max(0, 1 - Math.min(1, rho2)));
+  const φ0 = (12 * Math.PI) / 180;
+  const λ0 = (15 * Math.PI) / 180;
+  const sinφ0 = Math.sin(φ0);
+  const cosφ0 = Math.cos(φ0);
+  const φ = Math.asin(Math.max(-1, Math.min(1, z * sinφ0 + y * cosφ0)));
+  const λ = λ0 + Math.atan2(x, z * cosφ0 - y * sinφ0);
+  const lat = (φ * 180) / Math.PI;
+  const lng = ((((λ * 180) / Math.PI + 540) % 360) - 180);
+  const named = ALL_PINS.find((p) => haversine(lat, lng, p.lat, p.lng) < 280);
+  return { lat, lng, label: named?.city || coordsLabel(lat, lng) };
+}
+
 function reducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -270,7 +303,7 @@ export function GxApp() {
     patch({ step: "found", you: found.point, how: found.how, near, nearest });
     const via = found.how === "geo" ? "гео браузера" : "по поясу";
     setStatus(`Нашли · ${found.point.label} · ${via}`);
-    await wait(520);
+    await wait(220);
     if (!live()) return result;
 
     patch({ step: "scan", count: 0, lit: [] });
@@ -279,19 +312,19 @@ export function GxApp() {
       if (!live()) return result;
       patch({ count, lit: order.slice(0, count).map((p) => p.id), step: "scan" });
       setStatus(`Считаю точки · ${count} по миру · каталог, не живой control plane`);
-      await wait(280);
+      await wait(140);
     }
     if (!live()) return result;
 
     patch({ step: "lock", near, nearest, lit: near.map((p) => p.id) });
     setStatus(`Ближайшие · ${near.map((p) => p.city).join(", ")}`);
-    await wait(420);
+    await wait(180);
     if (!live()) return result;
 
     patch({ step: "beam", beam: true });
     const title = planTitle ? `«${planTitle}» · ` : "";
     setStatus(`${title}${found.point.label} → ${nearest?.city ?? "выход"} · это показ маршрута, не туннель`);
-    await wait(kind === "plan" ? 640 : 380);
+    await wait(kind === "plan" ? 260 : 160);
     if (!live()) return result;
     if (kind === "plan") patch({ step: "lock", beam: true });
     return result;
@@ -543,17 +576,26 @@ function LivingPlanet({
   const [pickMode, setPickMode] = useState<PickMode>(null);
   const [terrain3d, setTerrain3d] = useState(true);
   const [dragging, setDragging] = useState(false);
+  const [mapMode, setMapMode] = useState(false);
+  const [mapLive, setMapLive] = useState(false);
+  const [focus, setFocus] = useState<GeoPoint | null>(null);
+  const [zoomSignal, setZoomSignal] = useState(0);
+  const [zoomDir, setZoomDir] = useState<1 | -1>(1);
   const zoomRef = useRef(1);
+  const mapModeRef = useRef(false);
+  const mapZoomRef = useRef(3);
+  const hoverTimer = useRef<number | null>(null);
   const dragYaw = useRef(0);
   const drag = useRef<{ x: number; yaw: number } | null>(null);
   const pinch = useRef<{ d: number; z: number } | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
+  const spin = useRef<HTMLDivElement>(null);
   const busy = phase === "flying";
   const on = phase === "on";
   const youXY = ritual.you ? diskXY(ritual.you) : null;
   const nearXY = ritual.nearest ? { x: ritual.nearest.x, y: ritual.nearest.y } : null;
-  const scale = ritual.step === "found" || ritual.step === "locate" ? Math.max(zoom, 1.78) : zoom;
+  const scale = mapMode ? 2.05 : ritual.step === "found" || ritual.step === "locate" ? Math.max(zoom, 1.55) : zoom;
 
   function go(next: number) {
     const target = Math.min(2.15, Math.max(1, next));
@@ -561,22 +603,54 @@ function LivingPlanet({
     setZoom(target);
   }
 
+  function diveTo(point: GeoPoint) {
+    setFocus(point);
+    setMapLive(true);
+    setMapMode(true);
+    mapModeRef.current = true;
+    go(2.05);
+  }
+
+  function leaveMap() {
+    setMapMode(false);
+    mapModeRef.current = false;
+    go(1.15);
+  }
+
   useEffect(() => {
     wrap.current?.style.setProperty("--gx-scale", String(scale));
   }, [scale]);
 
   useEffect(() => {
+    void import("leaflet");
+    void import("leaflet/dist/leaflet.css");
+  }, []);
+
+  useEffect(() => {
+    if (ritual.step !== "beam" || !ritual.nearest) return;
+    const id = window.setTimeout(() => {
+      diveTo({ lat: ritual.nearest!.lat, lng: ritual.nearest!.lng, label: ritual.nearest!.city });
+    }, 160);
+    return () => window.clearTimeout(id);
+  }, [ritual.step, ritual.nearest]);
+
+  useEffect(() => {
     const el = stage.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      if (mapModeRef.current) return;
       e.preventDefault();
-      const target = Math.min(2.15, Math.max(1, zoomRef.current + (e.deltaY > 0 ? -0.18 : 0.18)));
-      zoomRef.current = target;
-      setZoom(target);
+      const next = zoomRef.current + (e.deltaY > 0 ? -0.22 : 0.22);
+      if (e.deltaY < 0 && next >= 1.72) {
+        const point = to ?? from ?? ritual.you ?? { lat: 52.23, lng: 21.01, label: "Warsaw" };
+        diveTo(point);
+        return;
+      }
+      go(next);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [from, to, ritual.you]);
 
   function applyDrag() {
     wrap.current?.style.setProperty("--gx-drag", `${dragYaw.current}deg`);
@@ -584,13 +658,23 @@ function LivingPlanet({
 
   function startPicking(mode: Exclude<PickMode, null>) {
     setPickMode(mode);
-    if (zoom < 1.25) go(1.35);
+    if (!mapMode && zoom < 1.25) go(1.3);
   }
 
   function picked(mode: Exclude<PickMode, null>, point: GeoPoint) {
     if (mode === "from") onFrom(point);
     else onTo(point);
     setPickMode(null);
+    diveTo(point);
+  }
+
+  function anywhere(point: GeoPoint) {
+    if (pickMode) {
+      picked(pickMode, point);
+      return;
+    }
+    onTo(point);
+    diveTo(point);
   }
 
   function hitPin(clientX: number, clientY: number) {
@@ -608,28 +692,69 @@ function LivingPlanet({
   }
 
   function pointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
+    if (mapMode || e.button !== 0) return;
     drag.current = { x: e.clientX, yaw: dragYaw.current };
     setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function pointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!drag.current) return;
+    if (mapMode || !drag.current) return;
     dragYaw.current = drag.current.yaw + (e.clientX - drag.current.x) * 0.28;
     applyDrag();
   }
 
   function pointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (mapMode) return;
     const start = drag.current;
     drag.current = null;
     setDragging(false);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    if (!pickMode || !start) return;
+    if (!start) return;
     if (Math.abs(e.clientX - start.x) > 10) return;
     const pin = hitPin(e.clientX, e.clientY);
-    if (!pin) return;
-    picked(pickMode, { lat: pin.lat, lng: pin.lng, label: pin.city });
+    const point = pin
+      ? { lat: pin.lat, lng: pin.lng, label: pin.city }
+      : spin.current
+        ? diskToGeo(e.clientX, e.clientY, spin.current)
+        : null;
+    if (!point) return;
+    if (pickMode) picked(pickMode, point);
+    else diveTo(point);
+  }
+
+  function hoverPin(pin: Pin) {
+    if (mapModeRef.current || drag.current) return;
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      diveTo({ lat: pin.lat, lng: pin.lng, label: pin.city });
+    }, 160);
+  }
+
+  function zoomMinus() {
+    if (mapMode) {
+      if (mapZoomRef.current <= 3) leaveMap();
+      else {
+        setZoomDir(-1);
+        setZoomSignal((n) => n + 1);
+      }
+      return;
+    }
+    go(zoom - 0.28);
+  }
+
+  function zoomPlus() {
+    if (mapMode) {
+      setZoomDir(1);
+      setZoomSignal((n) => n + 1);
+      return;
+    }
+    if (zoom >= 1.55) {
+      const point = to ?? from ?? ritual.you ?? { lat: 52.23, lng: 21.01, label: "Warsaw" };
+      diveTo(point);
+      return;
+    }
+    go(zoom + 0.32);
   }
 
   const lit = new Set(ritual.lit);
@@ -639,20 +764,28 @@ function LivingPlanet({
     <>
       <div
         ref={stage}
-        className={`gx-earth-stage ${terrain3d ? "is-3d" : "is-top"} ${dragging ? "is-dragging" : ""} ${ritual.step !== "idle" ? `is-${ritual.step}` : ""}`}
+        className={`gx-earth-stage ${terrain3d ? "is-3d" : "is-top"} ${dragging ? "is-dragging" : ""} ${mapMode ? "is-map" : ""} ${ritual.step !== "idle" ? `is-${ritual.step}` : ""}`}
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
         onPointerCancel={pointerUp}
         onTouchStart={(e) => {
+          if (mapMode) return;
           if (e.touches.length === 2) {
             drag.current = null;
             pinch.current = { d: gap(e.touches), z: zoomRef.current };
           }
         }}
         onTouchMove={(e) => {
+          if (mapMode) return;
           if (pinch.current && e.touches.length === 2) {
-            go(pinch.current.z * (gap(e.touches) / pinch.current.d));
+            const next = pinch.current.z * (gap(e.touches) / pinch.current.d);
+            if (next >= 1.75) {
+              const point = to ?? from ?? ritual.you ?? { lat: 52.23, lng: 21.01, label: "Warsaw" };
+              diveTo(point);
+              return;
+            }
+            go(next);
           }
         }}
         onTouchEnd={() => {
@@ -663,9 +796,9 @@ function LivingPlanet({
           <div
             className="gx-planet-wrap"
             ref={wrap}
-            style={{ ["--gx-scale" as string]: scale, ["--gx-tilt" as string]: terrain3d ? "14deg" : "0deg" }}
+            style={{ ["--gx-scale" as string]: scale, ["--gx-tilt" as string]: terrain3d && !mapMode ? "14deg" : "0deg" }}
           >
-            <div className="gx-planet-spin">
+            <div className="gx-planet-spin" ref={spin}>
               <div className="gx-planet-img" />
               {ritual.beam && youXY && nearXY && (
                 <svg className="gx-beams" viewBox="0 0 100 100" aria-hidden>
@@ -693,12 +826,18 @@ function LivingPlanet({
                     className={cls}
                     style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
                     aria-label={pin.city}
-                    aria-hidden={!pickMode}
-                    tabIndex={pickMode ? 0 : -1}
+                    title={pin.city}
+                    aria-hidden={false}
+                    tabIndex={0}
+                    onMouseEnter={() => hoverPin(pin)}
+                    onMouseLeave={() => {
+                      if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+                    }}
                     onClick={(ev) => {
                       ev.stopPropagation();
-                      if (!pickMode) return;
-                      picked(pickMode, { lat: pin.lat, lng: pin.lng, label: pin.city });
+                      const point = { lat: pin.lat, lng: pin.lng, label: pin.city };
+                      if (pickMode) picked(pickMode, point);
+                      else diveTo(point);
                     }}
                   />
                 );
@@ -708,13 +847,35 @@ function LivingPlanet({
               )}
             </div>
             <div className="gx-planet-shade" />
-            <div className="gx-planet-atmos" />
-            <div className="gx-scan-ring" />
-            <div className="gx-scan-ring gx-scan-ring-delay" />
           </div>
         </div>
-        {ritual.count > 0 && ritual.step === "scan" && <div className="gx-scan-count">{ritual.count}</div>}
-        {pickMode && <div className="gx-pick-hint">Кликни точку на планете · {pickMode === "from" ? "откуда" : "куда"}</div>}
+        <div className="gx-map-shell">
+          {mapLive && (
+            <EarthMap
+              active={mapMode}
+              focus={focus}
+              pins={ALL_PINS}
+              you={ritual.you}
+              pickMode={pickMode}
+              onPick={picked}
+              onAnywhere={anywhere}
+              zoomSignal={zoomSignal}
+              zoomDir={zoomDir}
+              onZoom={(z) => {
+                mapZoomRef.current = z;
+              }}
+            />
+          )}
+        </div>
+        {ritual.count > 0 && ritual.step === "scan" && !mapMode && <div className="gx-scan-count">{ritual.count}</div>}
+        {pickMode && (
+          <div className="gx-pick-hint">
+            {mapMode ? "Кликни точку на карте" : "Кликни точку на планете"} · {pickMode === "from" ? "откуда" : "куда"}
+          </div>
+        )}
+        {mapMode && focus && !pickMode && (
+          <div className="gx-pick-hint">{focus.label} · клик — любая точка</div>
+        )}
       </div>
 
       <div className="gx-point-tools" aria-label="Точки маршрута">
@@ -726,26 +887,33 @@ function LivingPlanet({
           <span>Куда</span>
           <small>{to?.label || "выбрать"}</small>
         </button>
-        <button type="button" className={`gx-mode-btn ${terrain3d ? "active" : ""}`} onClick={() => setTerrain3d((v) => !v)}>
-          {terrain3d ? "3D" : "Сверху"}
+        <button
+          type="button"
+          className={`gx-mode-btn ${!mapMode && terrain3d ? "active" : ""}`}
+          onClick={() => {
+            if (mapMode) leaveMap();
+            else setTerrain3d((v) => !v);
+          }}
+        >
+          {mapMode ? "Планета" : terrain3d ? "3D" : "Сверху"}
         </button>
       </div>
 
       <div className="gx-controls">
-        <button type="button" className="gx-zoom" aria-label="Уменьшить" onClick={() => go(zoom - 0.28)}>
+        <button type="button" className="gx-zoom" aria-label="Уменьшить" onClick={zoomMinus}>
           −
         </button>
         <button type="button" className={`gx-connect ${on || busy ? "is-on" : ""}`} disabled={busy} onClick={onConnect}>
           {on ? "Отключить" : busy ? "Проверяю" : "Подключить"}
         </button>
-        <button type="button" className="gx-zoom" aria-label="Увеличить" onClick={() => go(zoom + 0.28)}>
+        <button type="button" className="gx-zoom" aria-label="Увеличить" onClick={zoomPlus}>
           +
         </button>
       </div>
       <p className="gx-status">{status}</p>
       {(from || to) && (
         <p className="gx-route">
-          {pointName(from, "авто")} → {pointName(to, "лучший выход")}
+          {pointName(from, "авто")} → {pointName(to, "точка")}
         </p>
       )}
     </>
