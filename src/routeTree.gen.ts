@@ -33,6 +33,9 @@ import { Route as ApiAgentAdviceRouteImport } from './routes/api/agent/advice'
 import { Route as ApiAgentHealthRouteImport } from './routes/api/agent/health'
 import { Route as ApiAgentIngestRouteImport } from './routes/api/agent/ingest'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiNativeConfigRouteImport } from './routes/api/native/config'
+import { Route as ApiNativeEdgeRouteImport } from './routes/api/native/edge'
+import { Route as ApiNativeStageRouteImport } from './routes/api/native/stage'
 import { Route as ApiPublicRoutesRouteImport } from './routes/api/public/routes'
 import { Route as ApiPublicStatusRouteImport } from './routes/api/public/status'
 import { Route as AppReportsIdRouteImport } from './routes/app/reports.$id'
@@ -157,6 +160,21 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNativeConfigRoute = ApiNativeConfigRouteImport.update({
+  id: '/api/native/config',
+  path: '/api/native/config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNativeEdgeRoute = ApiNativeEdgeRouteImport.update({
+  id: '/api/native/edge',
+  path: '/api/native/edge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNativeStageRoute = ApiNativeStageRouteImport.update({
+  id: '/api/native/stage',
+  path: '/api/native/stage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicRoutesRoute = ApiPublicRoutesRouteImport.update({
   id: '/api/public/routes',
   path: '/api/public/routes',
@@ -198,6 +216,9 @@ export interface FileRoutesByFullPath {
   '/api/agent/health': typeof ApiAgentHealthRoute
   '/api/agent/ingest': typeof ApiAgentIngestRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/native/config': typeof ApiNativeConfigRoute
+  '/api/native/edge': typeof ApiNativeEdgeRoute
+  '/api/native/stage': typeof ApiNativeStageRoute
   '/api/public/routes': typeof ApiPublicRoutesRoute
   '/api/public/status': typeof ApiPublicStatusRoute
   '/app/reports/$id': typeof AppReportsIdRoute
@@ -226,6 +247,9 @@ export interface FileRoutesByTo {
   '/api/agent/health': typeof ApiAgentHealthRoute
   '/api/agent/ingest': typeof ApiAgentIngestRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/native/config': typeof ApiNativeConfigRoute
+  '/api/native/edge': typeof ApiNativeEdgeRoute
+  '/api/native/stage': typeof ApiNativeStageRoute
   '/api/public/routes': typeof ApiPublicRoutesRoute
   '/api/public/status': typeof ApiPublicStatusRoute
   '/app/reports/$id': typeof AppReportsIdRoute
@@ -256,6 +280,9 @@ export interface FileRoutesById {
   '/api/agent/health': typeof ApiAgentHealthRoute
   '/api/agent/ingest': typeof ApiAgentIngestRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/native/config': typeof ApiNativeConfigRoute
+  '/api/native/edge': typeof ApiNativeEdgeRoute
+  '/api/native/stage': typeof ApiNativeStageRoute
   '/api/public/routes': typeof ApiPublicRoutesRoute
   '/api/public/status': typeof ApiPublicStatusRoute
   '/app/reports/$id': typeof AppReportsIdRoute
@@ -287,6 +314,9 @@ export interface FileRouteTypes {
     | '/api/agent/health'
     | '/api/agent/ingest'
     | '/api/auth/$'
+    | '/api/native/config'
+    | '/api/native/edge'
+    | '/api/native/stage'
     | '/api/public/routes'
     | '/api/public/status'
     | '/app/reports/$id'
@@ -315,6 +345,9 @@ export interface FileRouteTypes {
     | '/api/agent/health'
     | '/api/agent/ingest'
     | '/api/auth/$'
+    | '/api/native/config'
+    | '/api/native/edge'
+    | '/api/native/stage'
     | '/api/public/routes'
     | '/api/public/status'
     | '/app/reports/$id'
@@ -344,6 +377,9 @@ export interface FileRouteTypes {
     | '/api/agent/health'
     | '/api/agent/ingest'
     | '/api/auth/$'
+    | '/api/native/config'
+    | '/api/native/edge'
+    | '/api/native/stage'
     | '/api/public/routes'
     | '/api/public/status'
     | '/app/reports/$id'
@@ -366,6 +402,9 @@ export interface RootRouteChildren {
   ApiAgentHealthRoute: typeof ApiAgentHealthRoute
   ApiAgentIngestRoute: typeof ApiAgentIngestRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiNativeConfigRoute: typeof ApiNativeConfigRoute
+  ApiNativeEdgeRoute: typeof ApiNativeEdgeRoute
+  ApiNativeStageRoute: typeof ApiNativeStageRoute
   ApiPublicRoutesRoute: typeof ApiPublicRoutesRoute
   ApiPublicStatusRoute: typeof ApiPublicStatusRoute
 }
@@ -540,6 +579,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/native/config': {
+      id: '/api/native/config'
+      path: '/api/native/config'
+      fullPath: '/api/native/config'
+      preLoaderRoute: typeof ApiNativeConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/native/edge': {
+      id: '/api/native/edge'
+      path: '/api/native/edge'
+      fullPath: '/api/native/edge'
+      preLoaderRoute: typeof ApiNativeEdgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/native/stage': {
+      id: '/api/native/stage'
+      path: '/api/native/stage'
+      fullPath: '/api/native/stage'
+      preLoaderRoute: typeof ApiNativeStageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/routes': {
       id: '/api/public/routes'
       path: '/api/public/routes'
@@ -607,6 +667,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentHealthRoute: ApiAgentHealthRoute,
   ApiAgentIngestRoute: ApiAgentIngestRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiNativeConfigRoute: ApiNativeConfigRoute,
+  ApiNativeEdgeRoute: ApiNativeEdgeRoute,
+  ApiNativeStageRoute: ApiNativeStageRoute,
   ApiPublicRoutesRoute: ApiPublicRoutesRoute,
   ApiPublicStatusRoute: ApiPublicStatusRoute,
 }

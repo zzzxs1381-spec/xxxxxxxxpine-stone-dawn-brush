@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db";
 import { EDGE_NODES } from "./catalog";
 import { adviceFrom, classify, scoreRoutes, type ClientAdvice, type Evidence, type RoutePick } from "./classify";
+import { buildCorridor, type CorridorRecipe } from "./corridor";
 
 function rid(prefix: string) {
   return `${prefix}_${crypto.randomUUID().slice(0, 12)}`;
@@ -59,12 +60,19 @@ export async function persistDiagnostic(input: {
   latencyMs?: number;
   evidence: Evidence[];
   fingerprintBucket?: string;
-}): Promise<{ id: string; classification: string; routes: RoutePick[]; advice: ClientAdvice }> {
+}): Promise<{ id: string; classification: string; routes: RoutePick[]; advice: ClientAdvice; corridor: CorridorRecipe }> {
   const sql = await getSql();
   const id = rid("diag");
   const classification = classify(input.evidence);
   const routes = scoreRoutes(classification, EDGE_NODES);
   const advice = adviceFrom(classification, routes);
+  const corridor = buildCorridor({
+    classification,
+    routes,
+    evidence: input.evidence,
+    ipv6Ok: input.ipv6Ok,
+    nodes: EDGE_NODES,
+  });
   const evidence = JSON.stringify(input.evidence);
   const routeJson = JSON.stringify(routes);
   const adviceJson = JSON.stringify(advice);
@@ -81,5 +89,5 @@ export async function persistDiagnostic(input: {
       ${input.deviceId ?? null}, ${adviceJson}::jsonb
     )
   `;
-  return { id, classification, routes, advice };
+  return { id, classification, routes, advice, corridor };
 }

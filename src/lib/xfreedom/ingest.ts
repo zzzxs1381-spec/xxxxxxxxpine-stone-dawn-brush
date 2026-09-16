@@ -1,8 +1,10 @@
 import { getSql } from "@/lib/db";
 import { asAdvice, asEvidence, asRoutes, classify, truthFromReport, type Evidence } from "./classify";
+import { buildCorridor } from "./corridor";
 import { flagsFromEvidence } from "./ingest-metrics";
 import { recordIngestEvent } from "./ingest-store";
 import { hashToken, mapPlatform, persistDiagnostic, touchDevice } from "./persist";
+import { EDGE_NODES } from "./catalog";
 
 export type AgentPayload = {
   token?: string;
@@ -146,6 +148,7 @@ export async function ingestAgentReport(payload: AgentPayload) {
       classification: saved.classification,
       routes: saved.routes,
       advice: saved.advice,
+      corridor: saved.corridor,
       truth,
     };
   } catch (err) {
@@ -181,29 +184,46 @@ export async function adviceForToken(token: string) {
     source: string | null;
     online: boolean | null;
     https_ok: boolean | null;
+    ipv6_ok: boolean | null;
     latency_ms: number | null;
     route_json: unknown;
     advice_json: unknown;
     evidence: unknown;
     created_at: string;
   }>`
-    select id, classification, source, online, https_ok, latency_ms, route_json, advice_json, evidence, created_at
+    select id, classification, source, online, https_ok, ipv6_ok, latency_ms, route_json, advice_json, evidence, created_at
     from xf_diagnostics
     where user_id = ${agent.user_id}
     order by created_at desc
     limit 1
   `;
   if (!row) {
-    return { ok: true as const, status: 200, diagnosticId: null, classification: "UNKNOWN", routes: [], advice: null };
+    return {
+      ok: true as const,
+      status: 200,
+      diagnosticId: null,
+      classification: "UNKNOWN",
+      routes: [],
+      advice: null,
+      corridor: buildCorridor({ classification: "UNKNOWN", nodes: EDGE_NODES }),
+    };
   }
   const classification = row.classification || classify(asEvidence(row.evidence));
+  const routes = asRoutes(row.route_json);
   return {
     ok: true as const,
     status: 200,
     diagnosticId: row.id,
     classification,
-    routes: asRoutes(row.route_json),
+    routes,
     advice: asAdvice(row.advice_json),
+    corridor: buildCorridor({
+      classification,
+      routes,
+      evidence: asEvidence(row.evidence),
+      ipv6Ok: row.ipv6_ok,
+      nodes: EDGE_NODES,
+    }),
     latencyMs: row.latency_ms,
     createdAt: row.created_at,
     truth: truthFromReport({

@@ -1,5 +1,6 @@
 import { runBrowserDiagnostics } from "./browser-diag";
 import { asAdvice, asRoutes, type ClientAdvice, type Evidence, type RoutePick } from "./classify";
+import { buildCorridor, type CorridorRecipe } from "./corridor";
 import { issueAgentToken } from "./server";
 
 const TOKEN_KEY = "xf-probe-token";
@@ -11,6 +12,7 @@ export type ProbeRun = {
   classification?: string;
   routes: RoutePick[];
   advice: ClientAdvice | null;
+  corridor?: CorridorRecipe;
   evidence?: Evidence[];
   latencyMs?: number;
 };
@@ -22,6 +24,7 @@ type IngestBody = {
   error?: string;
   routes?: RoutePick[];
   advice?: ClientAdvice;
+  corridor?: CorridorRecipe;
 };
 
 function readStoredToken(): string | null {
@@ -136,6 +139,13 @@ export async function runCabinetProbe(opts: {
       classification: body.classification,
       routes: asRoutes(body.routes),
       advice: asAdvice(body.advice),
+      corridor:
+        body.corridor ??
+        buildCorridor({
+          classification: body.classification,
+          routes: asRoutes(body.routes),
+          evidence: measured.evidence,
+        }),
       evidence: measured.evidence,
       latencyMs: measured.latencyMs,
     },

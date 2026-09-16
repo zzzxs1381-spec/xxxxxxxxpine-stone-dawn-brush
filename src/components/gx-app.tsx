@@ -6,12 +6,14 @@ import {
   adviceFrom,
   classify,
   scoreRoutes,
+  transportLabel,
   type ClientAdvice,
   type Evidence,
 } from "@/lib/xfreedom/classify";
 import { runBrowserDiagnostics } from "@/lib/xfreedom/browser-diag";
 import { runCabinetProbe } from "@/lib/xfreedom/run-probe";
-import { measureServices, pickTransport, serviceEvidence, type ServiceProbe } from "@/lib/xfreedom/service-probe";
+import { measureServices, serviceEvidence, type ServiceProbe } from "@/lib/xfreedom/service-probe";
+import { buildCorridor, formatCorridorText } from "@/lib/xfreedom/corridor";
 import { startTrial } from "@/lib/xfreedom/server";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { EarthMap } from "@/components/earth-map";
@@ -254,14 +256,6 @@ async function bestPublishedRoute(): Promise<RouteMeta | null> {
   }
 }
 
-function channelText(transport: string, sni: string, vector: string, route?: RouteMeta | null, extra?: string) {
-  const live = route
-    ? `\nbackend · ${route.name || route.id || "route"} · ${route.protocol || transport}${route.transport ? `/${route.transport}` : ""}`
-    : "";
-  const more = extra ? `\n${extra}` : "";
-  return `вектор готов · ${transport}\n${vector} · SNI ${sni}${live}${more}\nмаршрут выдаётся действующим XFreedom backend`;
-}
-
 function pointName(point: GeoPoint | null, fallback: string) {
   return point ? point.label : fallback;
 }
@@ -372,30 +366,37 @@ export function GxApp() {
         }
       })(),
     ]);
-    const path = pickTransport(rows);
     const extraEvidence = serviceEvidence(rows);
-    let headline = engine.advice?.headline;
-    let prefer = engine.advice?.preferTransport;
+    let classNow = engine.ok ? engine.classification : undefined;
+    let routesNow = engine.ok ? engine.routes : [];
+    const mergedEvidence = [...(engine.ok ? (engine.evidence ?? []) : []), ...extraEvidence];
     if (extraEvidence.length > 0 && engine.ok) {
-      const local = classify([...(engine.evidence ?? []), ...extraEvidence]);
-      const routesNow = scoreRoutes(local, EDGE_NODES);
-      const localAdvice = adviceFrom(local, routesNow);
-      headline = localAdvice.headline;
-      prefer = localAdvice.preferTransport;
+      const local = classify(mergedEvidence);
+      routesNow = scoreRoutes(local, EDGE_NODES);
+      classNow = local;
     }
     setResults(rows);
-    const extra = [
-      headline ? `совет · ${headline}` : null,
-      prefer ? `движок · ${prefer}` : null,
-      engine.latencyMs != null ? `rtt · ${engine.latencyMs} мс` : null,
-      "это замер и совет, не системный туннель",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    setAdvice(channelText(path.transport, path.sni, path.vector, route, extra));
+    const ipv6Ok = mergedEvidence.find((e) => e.check === "ipv6")?.result === "ok";
+    const recipe =
+      engine.ok && "corridor" in engine && engine.corridor && extraEvidence.length === 0
+        ? engine.corridor
+        : buildCorridor({
+            classification: classNow,
+            routes: routesNow,
+            evidence: mergedEvidence,
+            ipv6Ok,
+            fromLabel: pointName(from ?? found.point, "это устройство"),
+            toCity: pointName(to, found.nearest?.city ?? "выход"),
+            nodes: EDGE_NODES,
+          });
+    setAdvice(formatCorridorText(recipe));
     setPhase("on");
-    const liveRoute = route?.protocol ? ` · ${route.protocol}` : ` · ${path.transport}`;
-    setStatus(`${routeText}${liveRoute} · замер, не туннель`);
+    const liveRoute = recipe.hops[0]
+      ? ` · ${transportLabel(recipe.hops[0].transport)}`
+      : route?.protocol
+        ? ` · ${route.protocol}`
+        : "";
+    setStatus(`${recipe.fromLabel} → ${recipe.toCity}${liveRoute} · замер, не туннель`);
   }
 
   async function pay() {
@@ -536,7 +537,9 @@ export function GxApp() {
         )}
 
         {tab === "lane" && (
-          <pre className="gx-channel">{advice || "Сначала «Подключить» — здесь будет выбранный маршрут."}</pre>
+          <pre className="gx-channel">
+            {advice || "Сначала «Подключить» — откуда, куда и какой коридор для телефона."}
+          </pre>
         )}
       </main>
 

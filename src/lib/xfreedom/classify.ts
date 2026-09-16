@@ -99,6 +99,8 @@ export function transportLabel(t: string): string {
   if (t === "HYSTERIA2") return "быстрая";
   if (t === "VLESS_REALITY") return "тихая";
   if (t === "AMNEZIAWG") return "другая форма";
+  if (t === "TLS13_SNI") return "как обычный сайт";
+  if (t === "SSH_TCP") return "узкий запас";
   return t;
 }
 
@@ -123,11 +125,20 @@ export function scoreRoutes(
         transport = "VLESS_REALITY";
         score += 0.1;
         why = "Быстрая дорога закрыта — берём тихую";
+      } else if (udpBlocked && n.transports.includes("TLS13_SNI")) {
+        transport = "TLS13_SNI";
+        score += 0.08;
+        why = "UDP нет — дорога выглядит как обычный HTTPS";
       }
-      if (tlsTrouble && n.transports.includes("HYSTERIA2")) {
+      if (tlsTrouble && n.transports.includes("HYSTERIA2") && !udpBlocked) {
         transport = "HYSTERIA2";
         score += 0.06;
         why = "Шифрование ломают — пробуем другую форму дороги";
+      }
+      if (tlsTrouble && udpBlocked && n.transports.includes("TLS13_SNI")) {
+        transport = "TLS13_SNI";
+        score += 0.12;
+        why = "И быстрая, и обычный TLS ломают — прикрываемся чужим именем";
       }
       if (classification === "HIGH_LATENCY" && (n.region.startsWith("EU") || n.region === "TR" || n.region === "CAU")) {
         score += 0.05;
@@ -144,7 +155,25 @@ export function scoreRoutes(
     .slice(0, 3);
 
   const roles: RoutePick["role"][] = ["PRIMARY", "FALLBACK_1", "FALLBACK_2"];
-  return scored.map((s, i) => ({ role: roles[i]!, ...s }));
+  const picked = scored.map((s, i) => ({ role: roles[i]!, ...s }));
+  if (
+    (classification === "TCP_PORT_FILTERING" || classification === "IP_UNREACHABLE") &&
+    picked.length > 0
+  ) {
+    const ssh = nodes.find((n) => n.health === "HEALTHY" && n.transports.includes("SSH_TCP"));
+    if (ssh) {
+      const hop: RoutePick = {
+        role: picked.length >= 3 ? "FALLBACK_2" : picked.length === 2 ? "FALLBACK_1" : "PRIMARY",
+        nodeId: ssh.id,
+        transport: "SSH_TCP",
+        score: 0.4,
+        why: "Двери режут — узкий запас только для страниц, без игр",
+      };
+      if (picked.length >= 3) picked[2] = hop;
+      else picked.push(hop);
+    }
+  }
+  return picked;
 }
 
 export type TruthStage = {
@@ -204,7 +233,7 @@ export function adviceFrom(classification: Classification | string, routes: Rout
       return {
         action: "PREFER_TCP",
         headline: "Быстрая дорога закрыта",
-        detail: "Телефону брать тихую дорогу, не быструю. Сайт коридор не строит.",
+        detail: "Телефону брать тихую или HTTPS-прикрытие, не быструю. Сайт коридор не строит.",
         preferTransport: "VLESS_REALITY",
         avoidUdp: true,
       };
@@ -212,8 +241,16 @@ export function adviceFrom(classification: Classification | string, routes: Rout
       return {
         action: "PREFER_QUIC",
         headline: "Шифрование ломают",
-        detail: "Кто-то мешает закрытому разговору: дверь есть, замок ломают. Телефону — другая форма дороги. Instagram и YouTube с этого сайта не откроются.",
+        detail: "Кто-то мешает закрытому разговору. Телефону — QUIC или TLS 1.3 под чужим именем. Instagram с этого сайта не откроется.",
         preferTransport: "HYSTERIA2",
+        avoidUdp: false,
+      };
+    case "TCP_PORT_FILTERING":
+      return {
+        action: "PREFER_TCP",
+        headline: "Часть дверей закрыта",
+        detail: "Не все входы работают. Последний запас — узкий SSH только для страниц.",
+        preferTransport: preferTransport === "HYSTERIA2" ? "TLS13_SNI" : preferTransport,
         avoidUdp: false,
       };
     case "DNS_FAILURE":
@@ -221,14 +258,6 @@ export function adviceFrom(classification: Classification | string, routes: Rout
         action: "NATIVE",
         headline: "Сайты не находятся по имени",
         detail: "Как записная книжка с вырванными адресами. Когда коридор встанет на телефоне — внутри будет своя книжка.",
-        preferTransport,
-        avoidUdp: false,
-      };
-    case "TCP_PORT_FILTERING":
-      return {
-        action: "PREFER_TCP",
-        headline: "Часть дверей закрыта",
-        detail: "Не все входы работают. Берём одну главную дорогу, где дверь ещё открыта — не тыкаем во все подряд.",
         preferTransport,
         avoidUdp: false,
       };
